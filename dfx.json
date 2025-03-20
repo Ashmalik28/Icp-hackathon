@@ -1,0 +1,38 @@
+{
+  "canisters": {
+    "internet_identity": {
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "frontend": {},
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "type": "custom",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
+    },
+    "ridesharing_backend": {
+      "candid": "src/ridesharing_backend/ridesharing_backend.did",
+      "package": "ridesharing_backend",
+      "type": "rust"
+    },
+    "ridesharing_frontend": {
+      "dependencies": [
+        "ridesharing_backend"
+      ],
+      "source": [
+        "src/ridesharing_frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "ridesharing_frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
