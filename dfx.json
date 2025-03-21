@@ -12,10 +12,13 @@
       "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz"
     },
     "ridesharing_backend": {
-      "candid": "src/ridesharing_backend/ridesharing_backend.did",
-      "package": "ridesharing_backend",
-      "type": "rust"
-    },
+    "candid": "src/ridesharing_backend/ridesharing_backend.did",
+    "package": "ridesharing_backend",
+    "type": "rust",
+    "controllers": [
+    "xotqc-mb2sc-dlqlo-q3ijw-4paru-nlkb3-jy3kh-pfzh6-rf4vu-aigfb-cae"
+  ]
+  },
     "ridesharing_frontend": {
       "dependencies": [
         "ridesharing_backend"
