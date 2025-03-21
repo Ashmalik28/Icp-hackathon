@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { AuthClient } from "@dfinity/auth-client";
 import { HttpAgent, Actor } from "@dfinity/agent";
 import { idlFactory, canisterId } from "declarations/ridesharing_backend";
+import { Principal } from "@dfinity/principal";
 
 const AuthContext = createContext(null);
 
@@ -150,11 +151,16 @@ export const AuthProvider = ({ children }) => {
     if (!actor) return [];
     try {
       console.log("Searching rides with:", { origin, destination });
-      return await actor.search_rides(
-        origin ? [origin] : [], // Convert to opt by wrapping in array
-        destination ? [destination] : [], // Convert to opt by wrapping in array
-        [] // Empty array for optional RideStatus
-      );
+      const rides = await getAllRides();
+      
+      // Filter rides based on search criteria
+      return rides.filter(ride => {
+        const matchOrigin = !origin || 
+          ride.origin.toLowerCase().includes(origin.toLowerCase());
+        const matchDestination = !destination || 
+          ride.destination.toLowerCase().includes(destination.toLowerCase());
+        return matchOrigin && matchDestination;
+      });
     } catch (error) {
       console.error("Failed to search rides:", error);
       return [];
@@ -174,7 +180,10 @@ export const AuthProvider = ({ children }) => {
   const buyTokens = async (amount) => {
     if (!actor) return null;
     try {
-      return await actor.buy_tokens(BigInt(amount));
+      console.log("Buying tokens:", amount);
+      const result = await actor.buy_tokens(BigInt(amount));
+      console.log("Buy tokens result:", result);
+      return result;
     } catch (error) {
       console.error("Failed to buy tokens:", error);
       return null;
@@ -184,7 +193,9 @@ export const AuthProvider = ({ children }) => {
   const getBalance = async () => {
     if (!actor || !principal) return 0;
     try {
+      console.log("Fetching balance for principal:", principal);
       const balance = await actor.get_balance(Principal.fromText(principal));
+      console.log("Current balance:", Number(balance));
       return Number(balance);
     } catch (error) {
       console.error("Failed to get balance:", error);
@@ -198,6 +209,32 @@ export const AuthProvider = ({ children }) => {
       return await actor.cancel_ride(rideId, principal);
     } catch (error) {
       console.error("Failed to cancel ride:", error);
+      return null;
+    }
+  };
+
+  const payForRide = async (driverId, amount) => {
+    if (!actor || !principal) return null;
+    try {
+      console.log("Paying for ride:", { driverId, amount });
+      const result = await actor.pay_for_ride(Principal.fromText(driverId), BigInt(amount));
+      console.log("Payment result:", result);
+      return result;
+    } catch (error) {
+      console.error("Failed to pay for ride:", error);
+      return null;
+    }
+  };
+
+  const driverJoin = async (rideId) => {
+    if (!actor || !principal) return null;
+    try {
+      console.log("Driver joining ride:", rideId);
+      const result = await actor.driver_join(rideId, principal);
+      console.log("Driver join result:", result);
+      return result;
+    } catch (error) {
+      console.error("Failed to join as driver:", error);
       return null;
     }
   };
@@ -224,6 +261,8 @@ export const AuthProvider = ({ children }) => {
         buyTokens,
         getBalance,
         cancelRide,
+        payForRide,
+        driverJoin,
       }}
     >
       {children}

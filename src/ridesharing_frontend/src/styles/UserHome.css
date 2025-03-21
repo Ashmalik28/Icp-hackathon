@@ -359,3 +359,116 @@
 .create-btn:hover {
   transform: translateY(-2px);
 }
+
+.token-purchase {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+}
+
+.token-input {
+  width: 100px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: black;
+  text-align: center;
+}
+
+.token-input::placeholder {
+  color: black;
+}
+
+.token-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.clear-btn {
+  padding: 0.8rem 2rem;
+  border: none;
+  background: rgba(231, 76, 60, 0.8);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s;
+  border-radius: 5px;
+  backdrop-filter: blur(5px);
+}
+
+.clear-btn:hover {
+  transform: translateY(-2px);
+}
+
+.pay-btn {
+  background: rgba(241, 196, 15, 0.8);
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.pay-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(241, 196, 15, 0.9);
+}
+
+.pay-btn:disabled {
+  background: rgba(189, 195, 199, 0.8);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.matching-rides-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.matching-rides-section h4 {
+  color: #2c3e50;
+  margin-bottom: 1rem;
+}
+
+.matching-rides-container {
+  display: grid;
+  gap: 1rem;
+}
+
+.matching-ride {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(0.95);
+  border: 1px solid rgba(52, 152, 219, 0.3);
+}
+
+.matching-ride:hover {
+  transform: scale(0.96);
+  border-color: rgba(52, 152, 219, 0.5);
+}
+
+.driver-join-btn {
+  background: rgba(155, 89, 182, 0.8);
+  color: white;
+  border: none;
+  padding: 0.8rem 2rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  margin-right: 1rem;
+}
+
+.driver-join-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(155, 89, 182, 0.9);
+}
+
+.driver-join-btn:disabled {
+  background: rgba(189, 195, 199, 0.8);
+  cursor: not-allowed;
+  transform: none;
+}

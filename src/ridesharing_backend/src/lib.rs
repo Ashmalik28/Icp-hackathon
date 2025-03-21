@@ -309,6 +309,37 @@ fn get_notifications(user_id: String) -> Vec<String> {
         .collect()
 }
 
+// Driver Join Function
+#[ic_cdk::update]
+fn driver_join(ride_id: String, driver_id: String) -> String {
+    let mut state = STORAGE_STATE.lock().unwrap();
+
+    if let Some(ride) = state.0.get_mut(&ride_id) {
+        if ride.status != RideStatus::Open {
+            return "Ride is not open for drivers.".to_string();
+        }
+
+        if ride.driver_id.is_some() {
+            return "Ride already has a driver.".to_string();
+        }
+
+        ride.driver_id = Some(driver_id.clone());
+        ride.is_driver = true;
+        
+        // Notify ride owner and riders
+        send_notification(&ride.owner, &format!("Driver {} has joined your ride.", driver_id));
+        for rider in &ride.riders {
+            if rider != &ride.owner {
+                send_notification(rider, "A driver has joined your ride.");
+            }
+        }
+
+        return "Successfully joined as driver.".to_string();
+    }
+
+    "Ride not found.".to_string()
+}
+
 fn delete_ride(ride_id: String) {
     let mut state = STORAGE_STATE.lock().unwrap();
 
