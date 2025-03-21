@@ -111,6 +111,97 @@ export const AuthProvider = ({ children }) => {
     setPrincipal(null);
   };
 
+  const postRide = async (origin, destination, maxRiders) => {
+    if (!actor || !principal) return null;
+    try {
+      console.log("Calling post_ride with:", {
+        user_id: principal,
+        origin,
+        destination,
+        maxRiders: Number(maxRiders)
+      });
+      const result = await actor.post_ride(
+        principal,
+        origin,
+        destination,
+        BigInt(maxRiders)
+      );
+      console.log("Post ride result:", result);
+      return result;
+    } catch (error) {
+      console.error("Failed to post ride:", error);
+      return null;
+    }
+  };
+
+  const getAllRides = async () => {
+    if (!actor) return [];
+    try {
+      const rides = await actor.get_all_rides();
+      console.log("Fetched rides:", rides);
+      return rides;
+    } catch (error) {
+      console.error("Failed to fetch rides:", error);
+      return [];
+    }
+  };
+
+  const searchRides = async (origin, destination) => {
+    if (!actor) return [];
+    try {
+      console.log("Searching rides with:", { origin, destination });
+      return await actor.search_rides(
+        origin ? [origin] : [], // Convert to opt by wrapping in array
+        destination ? [destination] : [], // Convert to opt by wrapping in array
+        [] // Empty array for optional RideStatus
+      );
+    } catch (error) {
+      console.error("Failed to search rides:", error);
+      return [];
+    }
+  };
+
+  const requestToJoin = async (rideId) => {
+    if (!actor || !principal) return null;
+    try {
+      return await actor.request_to_join(rideId, principal);
+    } catch (error) {
+      console.error("Failed to join ride:", error);
+      return null;
+    }
+  };
+
+  const buyTokens = async (amount) => {
+    if (!actor) return null;
+    try {
+      return await actor.buy_tokens(BigInt(amount));
+    } catch (error) {
+      console.error("Failed to buy tokens:", error);
+      return null;
+    }
+  };
+
+  const getBalance = async () => {
+    if (!actor || !principal) return 0;
+    try {
+      const balance = await actor.get_balance(Principal.fromText(principal));
+      return Number(balance);
+    } catch (error) {
+      console.error("Failed to get balance:", error);
+      return 0;
+    }
+  };
+
+  const cancelRide = async (rideId) => {
+    if (!actor || !principal) return null;
+    try {
+      return await actor.cancel_ride(rideId, principal);
+    } catch (error) {
+      console.error("Failed to cancel ride:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (localStorage.getItem('isAuthenticated')) {
       initializeAuthClient();
@@ -125,7 +216,14 @@ export const AuthProvider = ({ children }) => {
         principal, 
         loginWithInternetIdentity,
         loginWithPlug,
-        logout
+        logout,
+        postRide,
+        getAllRides,
+        searchRides,
+        requestToJoin,
+        buyTokens,
+        getBalance,
+        cancelRide,
       }}
     >
       {children}

@@ -1,9 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext"; // Fix import path
 import "../styles/UserHome.css";
 
 function UserHome() {
   const navigate = useNavigate();
+  const { actor, isAuthenticated, principal, postRide, getAllRides, searchRides, requestToJoin, buyTokens, getBalance, cancelRide } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [availableRides, setAvailableRides] = useState([]);
   const [tokenBalance, setTokenBalance] = useState(0); // Add token balance state
   const [fromLocation, setFromLocation] = useState("");
   const [toLocation, setToLocation] = useState("");
@@ -28,38 +32,142 @@ function UserHome() {
     },
   ]); // Example data, replace with actual user rides
 
+  useEffect(() => {
+    if (isAuthenticated && actor) {
+      fetchRides();
+      const interval = setInterval(fetchRides, 5000); // Refresh every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, actor, isCreateMode]); // Add isCreateMode as dependency
+
+  const fetchRides = async () => {
+    setIsLoading(true);
+    try {
+      const rides = await getAllRides();
+      console.log("Fetched rides:", rides);
+      
+      if (rides && Array.isArray(rides)) {
+        if (isCreateMode) {
+          // Show only user's created rides
+          const userRides = rides.filter(ride => ride.owner === principal);
+          console.log("User rides:", userRides);
+          setAvailableRides(userRides);
+        } else {
+          // Show all open rides not created by the user
+          const openRides = rides.filter(ride => 
+            ride.status?.Open !== undefined && 
+            ride.owner !== principal
+          );
+          console.log("Open rides:", openRides);
+          setAvailableRides(openRides);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch rides:", error);
+    }
+    setIsLoading(false);
+  };
+
+  const fetchBalance = async () => {
+    const balance = await getBalance();
+    setTokenBalance(balance);
+  };
+
   const handleLogout = () => {
     navigate("/");
   };
 
-  const handleBuyTokens = () => {
-    // TODO: Implement ICP blockchain integration for token purchase
-    console.log("Buy tokens clicked");
+  const handleBuyTokens = async () => {
+    setIsLoading(true);
+    try {
+      const result = await buyTokens(amount);
+      if (result) {
+        alert("Tokens purchased successfully!");
+        await fetchBalance();
+        setAmount("");
+      }
+    } catch (error) {
+      console.error("Failed to buy tokens:", error);
+      alert("Failed to buy tokens. Please try again.");
+    }
+    setIsLoading(false);
   };
 
-  const handleCreateRide = (e) => {
+  const handleCreateRide = async (e) => {
     e.preventDefault();
-    // Add the new ride to userRides
-    setUserRides([...userRides, { ...rideDetails }]);
-    // Reset form
-    setRideDetails({
-      from: "",
-      to: "",
-      time: "",
-      seats: "",
-      price: "",
-      driverAssigned: false, // Reset this field
-    });
+    setIsLoading(true);
+    try {
+      const rideId = await postRide(
+        rideDetails.from,
+        rideDetails.to,
+        Number(rideDetails.seats)
+      );
+      console.log("Created ride with ID:", rideId);
+      
+      if (rideId) {
+        alert("Ride created successfully!");
+        setRideDetails({
+          from: "",
+          to: "",
+          time: "",
+          seats: "",
+          price: "",
+          driverAssigned: false,
+        });
+        await fetchRides(); // Refresh rides immediately
+      }
+    } catch (error) {
+      console.error("Failed to create ride:", error);
+      alert("Failed to create ride. Please try again.");
+    }
+    setIsLoading(false);
   };
 
-  const handleDeleteRide = (index) => {
-    const updatedRides = userRides.filter((_, i) => i !== index);
-    setUserRides(updatedRides);
+  const handleDeleteRide = async (rideId) => {
+    setIsLoading(true);
+    try {
+      const result = await cancelRide(rideId);
+      if (result) {
+        alert("Ride cancelled successfully!");
+        await fetchRides();
+      }
+    } catch (error) {
+      console.error("Failed to cancel ride:", error);
+      alert("Failed to cancel ride. Please try again.");
+    }
+    setIsLoading(false);
   };
 
-  const handleAcceptRide = (index) => {
-    // Here you would typically make an API call to join the ride
-    console.log(`Requesting to join ride ${index}`);
+  const handleAcceptRide = async (rideId) => {
+    setIsLoading(true);
+    try {
+      const result = await requestToJoin(rideId);
+      if (result) {
+        alert("Successfully requested to join the ride!");
+        await fetchRides();
+      }
+    } catch (error) {
+      console.error("Failed to join ride:", error);
+      alert("Failed to join ride. Please try again.");
+    }
+    setIsLoading(false);
+  };
+
+  const handleSearchRides = async () => {
+    setIsLoading(true);
+    try {
+      console.log("Searching for rides:", { fromLocation, toLocation });
+      const rides = await searchRides(
+        fromLocation.trim() || null,
+        toLocation.trim() || null
+      );
+      console.log("Search results:", rides);
+      setAvailableRides(rides || []);
+    } catch (error) {
+      console.error("Failed to search rides:", error);
+      alert("Failed to search rides. Please try again.");
+    }
+    setIsLoading(false);
   };
 
   // Add this new handler
@@ -126,7 +234,7 @@ function UserHome() {
               />
               <button
                 className="search-btn glass"
-                onClick={() => console.log("Searching rides...")}
+                onClick={handleSearchRides}
               >
                 Search Rides
               </button>
@@ -175,73 +283,53 @@ function UserHome() {
         <div className="available-rides">
           <h2>{isCreateMode ? "Your Created Rides" : "Available Rides"}</h2>
           <div className="rides-container">
-            {isCreateMode ? (
-              userRides.map((ride, index) => (
-                <div className="ride-card glass" key={index}>
+            {isLoading ? (
+              <div className="loading">Loading rides...</div>
+            ) : availableRides.length === 0 ? (
+              <div className="no-rides">
+                {isCreateMode 
+                  ? "You haven't created any rides yet." 
+                  : "No available rides found."}
+              </div>
+            ) : (
+              availableRides.map((ride) => (
+                <div className="ride-card glass" key={ride.ride_id}>
                   <div className="ride-info">
-                    <h3>
-                      {ride.from} to {ride.to}
-                    </h3>
-                    <p>Time: {ride.time}</p>
-                    <p>Maximum Seats: {ride.seats}</p>
-                    <p>Driver Assigned: {ride.driverAssigned ? "Yes" : "No"}</p>
-                    <div className="ride-price">
-                      <i className="fas fa-coins"></i> {ride.price} Tokens
-                    </div>
+                    <h3>{ride.origin} to {ride.destination}</h3>
+                    <p>Available Seats: {Number(ride.max_riders) - (ride.riders?.length || 0)}</p>
+                    <p>Total Seats: {Number(ride.max_riders)}</p>
+                    <p>Created: {new Date(Number(ride.created_at) / 1000000).toLocaleString()}</p>
+                    {ride.driver_id && <p>Driver: {ride.driver_id}</p>}
+                  </div>
+                  {!isCreateMode && ride.status?.Open !== undefined && (
+                    <button
+                      className="book-btn glass"
+                      onClick={() => handleAcceptRide(ride.ride_id)}
+                      disabled={ride.riders?.includes(principal)}
+                    >
+                      {ride.riders?.includes(principal) ? 'Already Joined' : 'Join Ride'}
+                    </button>
+                  )}
+                  {isCreateMode && (
                     <div className="ride-actions">
                       <button
                         className="delete-btn glass"
-                        onClick={() => handleDeleteRide(index)}
+                        onClick={() => handleDeleteRide(ride.ride_id)}
                       >
-                        Delete Ride
+                        Cancel Ride
                       </button>
-                      {ride.driverAssigned && (
+                      {ride.driver_id && (
                         <button
                           className="start-btn glass"
-                          onClick={() => handleStartRide(index)}
+                          onClick={() => handleStartRide(ride.ride_id)}
                         >
                           Start Ride
                         </button>
                       )}
                     </div>
-                  </div>
+                  )}
                 </div>
               ))
-            ) : (
-              <>
-                <div className="ride-card glass">
-                  <div className="ride-info">
-                    <h3>Mumbai to Pune</h3>
-                    <p>Time: 10:00 AM</p>
-                    <p>Driver: John Doe</p>
-                    <div className="ride-price">
-                      <i className="fas fa-coins"></i> 50 Tokens
-                    </div>
-                  </div>
-                  <button
-                    className="book-btn glass"
-                    onClick={() => handleAcceptRide(0)}
-                  >
-                    Join Ride
-                  </button>
-                </div>
-                <div className="ride-card glass">
-                  <div className="ride-info">
-                    <h3>Delhi to Agra</h3>
-                    <p>Time: 9:00 AM</p>
-                    <p>Driver: Jane Smith</p>
-                    <div className="ride-price">
-                      <i className="fas fa-coins"></i> 40 Tokens
-                    </div>
-                  </div>
-                  <button
-                    className="book-btn glass"
-                    onClick={() => handleAcceptRide(1)}
-                  >
-                    Join Ride
-                  </button>
-                </div>
-              </>
             )}
           </div>
         </div>
