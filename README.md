@@ -11,7 +11,7 @@ Instant Carpool is a decentralized ride-sharing platform built on the **ICP Bloc
 
 ## 🛠️ Tech Stack
 - **Frontend:** React.js, JavaScript
-- **Backend:** Motoko & Azle (TypeScript for ICP Smart Contracts)
+- **Backend:** Rust (Canistors)
 - **Blockchain:** Internet Computer Protocol (ICP)
 - **Wallet Integration:** Plug Wallet & Internet Identity
 - **Tools:** DFX SDK, Candid, Truffle
