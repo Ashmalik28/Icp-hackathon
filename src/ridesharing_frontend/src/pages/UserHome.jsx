@@ -35,6 +35,9 @@ function UserHome() {
   const [searchMode, setSearchMode] = useState(false);
   const [matchingRides, setMatchingRides] = useState([]); // Add new state for matching rides
 
+  // Add new state for ride updates
+  const [lastCreatedRide, setLastCreatedRide] = useState(null);
+
   // Update useEffect to only fetch initial data
   useEffect(() => {
     if (isAuthenticated && actor) {
@@ -53,24 +56,32 @@ function UserHome() {
     }
   }, [isCreateMode]);
 
-  // Update fetchRides to handle filtering
+  // Add effect to update rides when in create mode
+  useEffect(() => {
+    if (isAuthenticated && actor && isCreateMode) {
+      const updateUserRides = async () => {
+        const rides = await getAllRides();
+        const userRides = rides.filter(ride => ride.owner === principal);
+        setAvailableRides(userRides);
+      };
+      updateUserRides();
+    }
+  }, [lastCreatedRide, isCreateMode]);
+
+  // Update fetchRides to work with both modes and search
   const fetchRides = async () => {
     if (!actor) return;
     setIsLoading(true);
     try {
       const rides = await getAllRides();
       if (rides && Array.isArray(rides)) {
-        if (searchMode) {
-          setAvailableRides(rides);
-        } else {
-          const filteredRides = isCreateMode
-            ? rides.filter(ride => ride.owner === principal)
-            : rides.filter(ride => 
-                ride.status?.Open !== undefined && 
-                ride.owner !== principal
-              );
-          setAvailableRides(filteredRides);
-        }
+        const filteredRides = isCreateMode
+          ? rides.filter(ride => ride.owner === principal)
+          : rides.filter(ride => 
+              ride.status?.Open !== undefined && 
+              ride.owner !== principal
+            );
+        setAvailableRides(filteredRides);
       }
     } catch (error) {
       console.error("Failed to fetch rides:", error);
@@ -108,19 +119,26 @@ function UserHome() {
     setIsLoading(false);
   };
 
+  // Update handleCreateRide to track new rides
   const handleCreateRide = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      const seats = parseInt(rideDetails.seats);
+      if (isNaN(seats) || seats <= 0) {
+        alert("Please enter a valid number of seats");
+        return;
+      }
+
+      // Explicitly set is_driver_created to false for user rides
       const rideId = await postRide(
         rideDetails.from,
         rideDetails.to,
-        Number(rideDetails.seats)
+        seats,
+        false  // explicitly mark as not driver-created
       );
-      console.log("Created ride with ID:", rideId);
       
       if (rideId) {
-        alert("Ride created successfully!");
         setRideDetails({
           from: "",
           to: "",
@@ -129,7 +147,8 @@ function UserHome() {
           price: "",
           driverAssigned: false,
         });
-        await fetchRides(); // Refresh rides immediately
+        await fetchRides();
+        alert("Ride created successfully! Waiting for a driver to join.");
       }
     } catch (error) {
       console.error("Failed to create ride:", error);
@@ -172,50 +191,32 @@ function UserHome() {
     setIsLoading(false);
   };
 
-  // Update handleSearchRides function to better filter by destination
+  // Update handleSearchRides function
   const handleSearchRides = async () => {
     setIsLoading(true);
     try {
-      const allRides = await getAllRides();
-      console.log("All fetched rides:", allRides);
-
-      let filteredRides = allRides;
-
-      // Filter by destination if provided
-      if (toLocation.trim()) {
-        filteredRides = allRides.filter(ride => 
-          ride.destination.toLowerCase().includes(toLocation.toLowerCase().trim())
-        );
-        console.log("Destination filtered rides:", filteredRides);
-      }
-
-      // Filter by from location if provided
-      if (fromLocation.trim()) {
-        filteredRides = filteredRides.filter(ride =>
-          ride.origin.toLowerCase().includes(fromLocation.toLowerCase().trim())
-        );
-        console.log("Origin filtered rides:", filteredRides);
-      }
-
-      // Only show open rides if not in create mode
-      if (!isCreateMode) {
-        filteredRides = filteredRides.filter(ride => 
-          ride.status?.Open !== undefined &&
-          ride.owner !== principal &&
-          ride.riders.length < Number(ride.max_riders)
-        );
-        console.log("Open rides filtered:", filteredRides);
-      } else {
-        // In create mode, only show user's rides
-        filteredRides = filteredRides.filter(ride => ride.owner === principal);
-        console.log("User's rides filtered:", filteredRides);
-      }
-
-      setAvailableRides(filteredRides);
+      console.log("Searching with:", { fromLocation, toLocation });
+      
+      const searchResults = await searchRides(
+        fromLocation || null,
+        toLocation || null
+      );
+      
+      console.log("Search results:", searchResults);
+      
+      // Filter based on current mode
+      const filteredResults = isCreateMode 
+        ? searchResults.filter(ride => ride.owner === principal)
+        : searchResults;
+      
       setSearchMode(true);
+      setAvailableRides(filteredResults);
+      setMatchingRides([]);
+
     } catch (error) {
       console.error("Failed to search rides:", error);
       alert("Failed to search rides. Please try again.");
+      setAvailableRides([]);
     }
     setIsLoading(false);
   };
@@ -226,6 +227,14 @@ function UserHome() {
     // Add your ride start logic here
   };
 
+  const calculatePerPersonCost = (ride) => {
+    const TOTAL_RIDE_COST = 10; // Fixed total ride cost
+    // Get number of current riders (excluding driver)
+    const numRiders = ride.riders?.length || 1;
+    // Calculate cost per person by dividing total cost by number of riders
+    return Math.ceil(TOTAL_RIDE_COST / numRiders);
+  };
+
   const handlePayForRide = async (ride) => {
     if (!ride.driver_id) {
       alert("No driver assigned to this ride yet.");
@@ -234,10 +243,18 @@ function UserHome() {
 
     setIsLoading(true);
     try {
-      const result = await payForRide(ride.driver_id, 10); // 10 tokens per ride
+      const perPersonCost = calculatePerPersonCost(ride);
+      // Ensure we're using the unwrapped driver_id value
+      const driverId = ride.driver_id.toString();
+      console.log("Paying driver:", driverId, "amount:", perPersonCost);
+      
+      const result = await payForRide(driverId, perPersonCost);
       if (result) {
-        alert("Payment successful!");
+        alert(`Payment of ${perPersonCost} tokens successful!`);
         await fetchBalance();
+        await fetchRides();
+      } else {
+        alert("Payment failed. Please check your balance and try again.");
       }
     } catch (error) {
       console.error("Failed to pay for ride:", error);
@@ -268,15 +285,14 @@ function UserHome() {
     setFromLocation("");
     setToLocation("");
     setSearchMode(false);
-    fetchRides();
+    setMatchingRides([]);
+    fetchRides(); // Fetch all rides again
   };
 
-  // Update mode toggle handler
+  // Update mode toggle handler to preserve search results
   const handleModeToggle = (createMode) => {
     setIsCreateMode(createMode);
-    setFromLocation("");
-    setToLocation("");
-    fetchRides(); // Fetch rides with mode filter only
+    // Don't clear search state or fetch rides on mode toggle
   };
 
   // Add new function to find matching rides
@@ -293,73 +309,96 @@ function UserHome() {
   };
 
   // Update the ride card render to include matching rides
-  const RideCard = ({ ride, isMainRide = true }) => (
-    <div className={`ride-card glass ${!isMainRide ? 'matching-ride' : ''}`}>
-      <div className="ride-info">
-        <h3>{ride.origin} to {ride.destination}</h3>
-        <p>Available Seats: {Number(ride.max_riders) - (ride.riders?.length || 0)}</p>
-        <p>Total Seats: {Number(ride.max_riders)}</p>
-        <p>Created: {new Date(Number(ride.created_at) / 1000000).toLocaleString()}</p>
-        {ride.driver_id && <p>Driver: {ride.driver_id}</p>}
-        <p>Status: {Object.keys(ride.status)[0]}</p>
-        {ride.driver_id && !isCreateMode && (
-          <button
-            className="pay-btn glass"
-            onClick={() => handlePayForRide(ride)}
-            disabled={isLoading}
-          >
-            Pay 10 Tokens
-          </button>
-        )}
-        {/* Show owner info if not the user's ride */}
-        {ride.owner !== principal && <p>Posted by: {ride.owner}</p>}
-      </div>
-      <div className="ride-actions">
-        {!isCreateMode && ride.status?.Open !== undefined && !ride.driver_id && (
-          <button
-            className="driver-join-btn glass"
-            onClick={() => handleDriverJoin(ride.ride_id)}
-            disabled={isLoading}
-          >
-            Join as Driver
-          </button>
-        )}
-        {!isCreateMode && ride.status?.Open !== undefined && (
-          <button
-            className="book-btn glass"
-            onClick={() => handleAcceptRide(ride.ride_id)}
-            disabled={ride.riders?.includes(principal)}
-          >
-            {ride.riders?.includes(principal) ? 'Already Joined' : 'Join Ride'}
-          </button>
-        )}
-        {/* Delete Button - Only show for owner's rides */}
-        {ride.owner === principal && (
-          <button
-            className="delete-btn glass"
-            onClick={() => handleDeleteRide(ride.ride_id)}
-            disabled={isLoading}
-          >
-            Delete Ride
-          </button>
-        )}
-      </div>
-      {isMainRide && !isCreateMode && (
-        <div className="matching-rides-section">
-          <h4>Similar Rides to {ride.destination}</h4>
-          <div className="matching-rides-container">
-            {findMatchingRides(ride).map(matchingRide => (
-              <RideCard 
-                key={matchingRide.ride_id} 
-                ride={matchingRide} 
-                isMainRide={false}
-              />
-            ))}
-          </div>
+  const RideCard = ({ ride, isMainRide = true }) => {
+    const perPersonCost = calculatePerPersonCost(ride);
+    const canPay = ride.driver_id && 
+                   ride.driver_id.length > 0 && 
+                   ride.status?.Open !== undefined && 
+                   ride.riders?.includes(principal);
+
+    // Check if the ride is pending a driver
+    const isDriverPending = !ride.driver_id || ride.driver_id.length === 0;
+
+    return (
+      <div className={`ride-card glass ${!isMainRide ? 'matching-ride' : ''}`}>
+        <div className="ride-info">
+          <h3>{ride.origin} to {ride.destination}</h3>
+          <p>Available Seats: {Number(ride.max_riders) - (ride.riders?.length || 0)}</p>
+          <p>Total Seats: {Number(ride.max_riders)}</p>
+          <p>Created: {new Date(Number(ride.created_at) / 1000000).toLocaleString()}</p>
+          <p>Driver Status: {
+            isDriverPending ? (
+              <span className="status-unassigned">Pending</span>
+            ) : (
+              <span className="status-assigned">Assigned</span>
+            )}
+          </p>
+          <p>Status: {Object.keys(ride.status)[0]}</p>
+          <p>Total Ride Cost: 10 RDT</p>
+          {ride.riders?.length > 1 && (
+            <p>Cost Split ({ride.riders.length} riders): {perPersonCost} RDT each</p>
+          )}
+          {ride.driver_id && ride.driver_id.length > 0 && ride.riders?.includes(principal) && (
+            <p className="payment-info">Your share: {perPersonCost} RDT</p>
+          )}
+          {/* Show owner info if not the user's ride */}
+          {ride.owner !== principal && <p>Posted by: {ride.owner}</p>}
         </div>
-      )}
-    </div>
-  );
+        <div className="ride-actions">
+          {!isCreateMode && ride.status?.Open !== undefined && (
+            <button
+              className="book-btn glass"
+              onClick={() => handleAcceptRide(ride.ride_id)}
+              disabled={ride.riders?.includes(principal)}
+            >
+              {ride.riders?.includes(principal) 
+                ? 'Already Joined' 
+                : 'Join Ride'}
+            </button>
+          )}
+          {/* Delete Button - Only show for owner's rides */}
+          {ride.owner === principal && (
+            <button
+              className="book-btn glass"
+              onClick={() => handleDeleteRide(ride.ride_id)}
+              disabled={isLoading}
+            >
+              Delete Ride
+            </button>
+          )}
+          {/* Only show payment button when driver is assigned and user is a rider */}
+          {canPay && (
+            <button
+              className="pay-btn glass"
+              onClick={() => handlePayForRide(ride)}
+              disabled={isLoading}
+            >
+              Pay {perPersonCost} RDT
+            </button>
+          )}
+        </div>
+        {/* Remove nested matching rides from here to prevent overlapping */}
+        {isMainRide && !isCreateMode && ride.owner !== principal && (
+          <div className="matching-rides-section">
+            <h4>Similar Rides to {ride.destination}</h4>
+            <div className="matching-rides-grid">
+              {findMatchingRides(ride).map(matchingRide => (
+                <RideCard 
+                  key={matchingRide.ride_id} 
+                  ride={matchingRide} 
+                  isMainRide={false}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const navigateToDriverDashboard = () => {
+    navigate('/driver-dashboard');
+  };
 
   return (
     <div className="home">
@@ -369,7 +408,7 @@ function UserHome() {
         </div>
         <div className="nav-links">
           <span className="token-balance glass">
-            <i className="fas fa-coins"></i> {tokenBalance} Tokens
+            <i className="fas fa-coins"></i> {tokenBalance} RDT
           </span>
           <div className="token-purchase glass">
             <input
@@ -385,14 +424,20 @@ function UserHome() {
               onClick={handleBuyTokens}
               disabled={!amount || isLoading}
             >
-              {isLoading ? "Buying..." : "Buy Tokens"}
+              {isLoading ? "Buying..." : "Buy RDT"}
             </button>
           </div>
           <button
             className="wallet-btn glass"
-            onClick={() => console.log("View previous rides...")}
+            onClick={() => alert("Coming Soon!")}
           >
             View Previous Rides
+          </button>
+          <button
+            className="switch-mode-btn glass"
+            onClick={navigateToDriverDashboard}
+          >
+            Switch to Driver Mode
           </button>
           <button className="logout-btn glass" onClick={handleLogout}>
             Logout
@@ -488,15 +533,23 @@ function UserHome() {
           )}
         </div>
         <div className="available-rides">
-          <h2>{isCreateMode ? "Your Created Rides" : "Available Rides"}</h2>
+          <h2>
+            {isCreateMode 
+              ? "Your Created Rides" 
+              : searchMode 
+                ? `Search Results (${availableRides.length})` 
+                : "Available Rides"}
+          </h2>
           <div className="rides-container">
             {isLoading ? (
               <div className="loading">Loading rides...</div>
             ) : availableRides.length === 0 ? (
               <div className="no-rides">
                 {isCreateMode 
-                  ? "You haven't created any rides yet." 
-                  : "No available rides found."}
+                  ? "You haven't created any rides yet."
+                  : searchMode
+                    ? "No rides found matching your search criteria."
+                    : "No available rides found."}
               </div>
             ) : (
               availableRides.map((ride) => (

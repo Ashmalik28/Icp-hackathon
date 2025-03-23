@@ -112,23 +112,24 @@ export const AuthProvider = ({ children }) => {
     setPrincipal(null);
   };
 
-  const postRide = async (origin, destination, maxRiders) => {
+  const postRide = async (origin, destination, maxRiders, isDriverCreated = false) => {
     if (!actor || !principal) return null;
     try {
-      console.log("Calling post_ride with:", {
-        user_id: principal,
-        origin,
-        destination,
-        maxRiders: Number(maxRiders)
-      });
-      const result = await actor.post_ride(
-        principal,
-        origin,
-        destination,
-        BigInt(maxRiders)
+      const maxRidersNumber = Number(maxRiders);
+      if (isNaN(maxRidersNumber) || maxRidersNumber <= 0) {
+        throw new Error("Invalid number of seats");
+      }
+
+      const rideId = await actor.post_ride(
+        principal,                // user_id
+        origin.toString(),        // origin
+        destination.toString(),   // destination
+        BigInt(maxRidersNumber), // max_riders
+        isDriverCreated          // is_driver_created
       );
-      console.log("Post ride result:", result);
-      return result;
+      
+      console.log("Created ride with ID:", rideId);
+      return rideId;
     } catch (error) {
       console.error("Failed to post ride:", error);
       return null;
@@ -151,16 +152,13 @@ export const AuthProvider = ({ children }) => {
     if (!actor) return [];
     try {
       console.log("Searching rides with:", { origin, destination });
-      const rides = await getAllRides();
-      
-      // Filter rides based on search criteria
-      return rides.filter(ride => {
-        const matchOrigin = !origin || 
-          ride.origin.toLowerCase().includes(origin.toLowerCase());
-        const matchDestination = !destination || 
-          ride.destination.toLowerCase().includes(destination.toLowerCase());
-        return matchOrigin && matchDestination;
-      });
+      const rides = await actor.search_rides(
+        origin ? [origin] : [], 
+        destination ? [destination] : [], 
+        [{ Open: null }]
+      );
+      console.log("Search results:", rides);
+      return rides;
     } catch (error) {
       console.error("Failed to search rides:", error);
       return [];
@@ -217,9 +215,20 @@ export const AuthProvider = ({ children }) => {
     if (!actor || !principal) return null;
     try {
       console.log("Paying for ride:", { driverId, amount });
-      const result = await actor.pay_for_ride(Principal.fromText(driverId), BigInt(amount));
-      console.log("Payment result:", result);
-      return result;
+      
+      // Ensure driverId is a string and properly formatted
+      const driverIdString = driverId.toString();
+      console.log("Driver ID string:", driverIdString);
+      
+      try {
+        const driverPrincipal = Principal.fromText(driverIdString);
+        const result = await actor.pay_for_ride(driverPrincipal, BigInt(amount));
+        console.log("Payment result:", result);
+        return result;
+      } catch (error) {
+        console.error("Failed to convert driver ID to Principal:", error);
+        return null;
+      }
     } catch (error) {
       console.error("Failed to pay for ride:", error);
       return null;
@@ -235,6 +244,16 @@ export const AuthProvider = ({ children }) => {
       return result;
     } catch (error) {
       console.error("Failed to join as driver:", error);
+      return null;
+    }
+  };
+
+  const checkDriverRewards = async () => {
+    if (!actor || !principal) return null;
+    try {
+      return await actor.check_driver_rewards(principal);
+    } catch (error) {
+      console.error("Failed to check driver rewards:", error);
       return null;
     }
   };
@@ -263,6 +282,7 @@ export const AuthProvider = ({ children }) => {
         cancelRide,
         payForRide,
         driverJoin,
+        checkDriverRewards,
       }}
     >
       {children}

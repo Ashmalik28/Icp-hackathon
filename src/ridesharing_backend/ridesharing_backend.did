@@ -25,7 +25,7 @@ service : {
     "get_balance": (user: principal) -> (nat64) query;
 
     // Ride management methods
-    "post_ride": (user_id: text, origin: text, destination: text, max_riders: nat64) -> (text);
+    "post_ride": (user_id: text, origin: text, destination: text, max_riders: nat64, is_driver_created: bool) -> (text);
     "get_all_rides": () -> (vec Ride) query;
     "search_rides": (opt text, opt text, opt RideStatus) -> (vec Ride) query;
     "request_to_join": (ride_id: text, requester_id: text) -> (text);
@@ -35,5 +35,8 @@ service : {
     
     // Notification methods
     "get_notifications": (user_id: text) -> (vec text) query;
+
+    // Loyalty rewards
+    "check_driver_rewards": (driver_id: text) -> (text);
 }
 

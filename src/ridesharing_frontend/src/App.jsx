@@ -71,7 +71,7 @@ function LandingPage() {
       }
       
       if (success) {
-        navigate(activeLogin === "user" ? "/user-home" : "/driver-home", { replace: true });
+        navigate(activeLogin === "user" ? "/home" : "/driver-dashboard", { replace: true });
       }
     } catch (error) {
       console.error("Login failed:", error);
@@ -178,8 +178,8 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          <Route path="/user-home" element={<UserHome />} />
-          <Route path="/driver-home" element={<DriverHome />} />
+          <Route path="/home" element={<UserHome />} />
+          <Route path="/driver-dashboard" element={<DriverHome />} />
         </Routes>
       </Router>
     </AuthProvider>

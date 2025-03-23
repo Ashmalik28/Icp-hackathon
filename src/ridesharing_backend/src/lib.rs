@@ -30,6 +30,15 @@ type NotificationStorage = Vec<Notification>;
 static STORAGE_STATE: Lazy<Mutex<(RideStorage, NotificationStorage)>> = 
     Lazy::new(|| Mutex::new((HashMap::new(), Vec::new())));
 
+#[derive(CandidType, Deserialize, Default, Clone, Debug)]
+struct DriverStats {
+    completed_rides: u64,
+    last_reward_at: u64,
+}
+
+static DRIVER_STATS: Lazy<Mutex<HashMap<String, DriverStats>>> = 
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
 /// Initialize both token and ride storage
 #[ic_cdk::init]
 fn init() {
@@ -84,24 +93,26 @@ fn pay_for_ride(driver: Principal, amount: u64) -> String {
 
     let mut state = get_token_state().lock().unwrap();
 
-    // First, extract balances
+    // Get current balances
     let user_balance = state.balances.get(&user).cloned().unwrap_or(0);
     let driver_balance = state.balances.get(&driver).cloned().unwrap_or(0);
 
-    // Check if user has enough balance
+    // Verify sufficient balance
     if user_balance < amount {
         return format!("❌ Payment failed: Insufficient balance. You have {} RDT.", user_balance);
     }
 
-    // Update balances in a separate step
+    // Execute the transfer
     state.balances.insert(user, user_balance - amount);
     state.balances.insert(driver, driver_balance + amount);
 
-    // Save state after update
+    // Save state
     storage::stable_save((state.clone(),)).expect("❌ Failed to save state");
 
-    ic_cdk::println!("✅ Paid {} RDT to driver {}! New balance: {}", amount, driver, user_balance - amount);
-    format!("✅ Paid {} RDT to driver {}!", amount, driver)
+    ic_cdk::println!("✅ Payment successful: {} RDT transferred from {} to {}", amount, user, driver);
+    ic_cdk::println!("New balances - User: {}, Driver: {}", user_balance - amount, driver_balance + amount);
+
+    format!("✅ Successfully paid {} RDT to driver!", amount)
 }
 
 /// Get user balance
@@ -119,21 +130,28 @@ fn get_balance(user: Principal) -> u64 {
 fn pre_upgrade() {
     let token_state = get_token_state().lock().unwrap();
     let storage_state = STORAGE_STATE.lock().unwrap();
-    storage::stable_save((&*token_state, &*storage_state))
+    let driver_stats = DRIVER_STATS.lock().unwrap();
+    storage::stable_save((&*token_state, &*storage_state, &*driver_stats))
         .expect("Failed to save state before upgrade");
 }
 
 /// Restore state after canister upgrade
 #[ic_cdk::post_upgrade]
 fn post_upgrade() {
-    let (token_state, storage_state): (RideToken, (RideStorage, NotificationStorage)) = 
-        storage::stable_restore().unwrap_or_default();
+    let (token_state, storage_state, driver_stats): (
+        RideToken, 
+        (RideStorage, NotificationStorage),
+        HashMap<String, DriverStats>
+    ) = storage::stable_restore().unwrap_or_default();
     
     let mut t_state = TOKEN_STATE.lock().unwrap();
     *t_state = token_state;
     
     let mut s_state = STORAGE_STATE.lock().unwrap();
     *s_state = storage_state;
+    
+    let mut d_stats = DRIVER_STATS.lock().unwrap();
+    *d_stats = driver_stats;
 }
 
 #[derive(CandidType, Deserialize, Clone, PartialEq)]
@@ -166,18 +184,27 @@ pub struct Ride {
     pub created_at: u64,
 }
 
-// Helper Function to Send Notification
-fn send_notification(user_id: &str, message: &str) {
-    let mut state = STORAGE_STATE.lock().unwrap();
-    state.1.push(Notification {
-        user_id: user_id.to_string(),
-        message: message.to_string(),
-    });
+// Helper function to collect notifications before sending them
+fn collect_notifications(ride: &Ride, message: &str) -> Vec<(String, String)> {
+    ride.riders
+        .iter()
+        .map(|rider| (rider.clone(), message.to_string()))
+        .collect()
+}
+
+// Update send_notification to handle multiple notifications at once
+fn send_notifications(state: &mut (RideStorage, NotificationStorage), notifications: Vec<(String, String)>) {
+    for (user_id, message) in notifications {
+        state.1.push(Notification {
+            user_id,
+            message,
+        });
+    }
 }
 
 // Post Ride Function
 #[ic_cdk::update]
-fn post_ride(user_id: String, origin: String, destination: String, max_riders: usize) -> String {
+fn post_ride(user_id: String, origin: String, destination: String, max_riders: u64, is_driver_created: bool) -> String {
     let ride_id = format!("ride-{}", ic_cdk::api::time());
     let mut riders = HashSet::new();
     riders.insert(user_id.clone());
@@ -188,10 +215,10 @@ fn post_ride(user_id: String, origin: String, destination: String, max_riders: u
         origin,
         destination,
         owner: user_id.clone(),
-        is_driver: false,
-        driver_id: None,
+        is_driver: is_driver_created,
+        driver_id: if is_driver_created { Some(user_id) } else { None },
         status: RideStatus::Open,
-        max_riders,
+        max_riders: max_riders as usize,
         created_at: ic_cdk::api::time(),
     };
 
@@ -216,9 +243,15 @@ fn search_rides(origin: Option<String>, destination: Option<String>, status: Opt
     state.0
         .values()
         .filter(|ride| {
-            (origin.as_ref().map_or(true, |o| &ride.origin == o)) &&
-            (destination.as_ref().map_or(true, |d| &ride.destination == d)) &&
-            (status.as_ref().map_or(true, |s| &ride.status == s))
+            let origin_matches = origin.as_ref().map_or(true, |o| 
+                ride.origin.to_lowercase().contains(&o.to_lowercase())
+            );
+            let destination_matches = destination.as_ref().map_or(true, |d| 
+                ride.destination.to_lowercase().contains(&d.to_lowercase())
+            );
+            let status_matches = status.as_ref().map_or(true, |s| &ride.status == s);
+
+            origin_matches && destination_matches && status_matches
         })
         .cloned()
         .collect()
@@ -229,28 +262,27 @@ fn search_rides(origin: Option<String>, destination: Option<String>, status: Opt
 fn request_to_join(ride_id: String, requester_id: String) -> String {
     let mut state = STORAGE_STATE.lock().unwrap();
 
-    ic_cdk::println!("Received ride_id: {}, requester_id: {}", ride_id, requester_id);
-
-    for (id, ride) in &mut state.0 {
-        ic_cdk::println!("Stored ride_id: {}", id);
-        if id == &ride_id {
-            if ride.status != RideStatus::Open {
-                return "Ride is not open for new riders.".to_string();
-            }
-
-            if ride.riders.contains(&requester_id) {
-                return "You are already part of this ride.".to_string();
-            }
-
-            if ride.riders.len() >= ride.max_riders {
-                return "Ride is full.".to_string();
-            }
-
-            ride.riders.insert(requester_id.clone());
-            send_notification(&ride.owner, &format!("User {} requested to join your ride.", requester_id));
-
-            return "Request sent to ride owner.".to_string();
+    if let Some(ride) = state.0.get_mut(&ride_id) {
+        if ride.status != RideStatus::Open {
+            return "Ride is not open for new riders.".to_string();
         }
+
+        if ride.riders.contains(&requester_id) {
+            return "You are already part of this ride.".to_string();
+        }
+
+        if ride.riders.len() >= ride.max_riders {
+            return "Ride is full.".to_string();
+        }
+
+        ride.riders.insert(requester_id.clone());
+        let notification = vec![(
+            ride.owner.clone(),
+            format!("User {} requested to join your ride.", requester_id)
+        )];
+        send_notifications(&mut state, notification);
+
+        return "Request sent to ride owner.".to_string();
     }
 
     "Ride not found.".to_string()
@@ -268,7 +300,11 @@ fn accept_rider(ride_id: String, owner_id: String, user_id: String) -> String {
 
         if ride.riders.len() < ride.max_riders {
             ride.riders.insert(user_id.clone());
-            send_notification(&user_id, "Your request to join the ride has been accepted.");
+            let notification = vec![(
+                user_id,
+                "Your request to join the ride has been accepted.".to_string()
+            )];
+            send_notifications(&mut state, notification);
             return "User added to the ride.".to_string();
         }
 
@@ -278,23 +314,32 @@ fn accept_rider(ride_id: String, owner_id: String, user_id: String) -> String {
     "Ride not found.".to_string()
 }
 
-// Cancel Ride
+// Update the delete_ride function to be public and include owner verification
+#[ic_cdk::update]
+fn delete_ride(ride_id: String, owner_id: String) -> String {
+    let mut state = STORAGE_STATE.lock().unwrap();
+    
+    // Check if ride exists and verify ownership
+    let ride = match state.0.get(&ride_id) {
+        Some(r) if r.owner == owner_id => r.clone(),
+        Some(_) => return "Only the ride owner can delete the ride.".to_string(),
+        None => return "Ride not found.".to_string(),
+    };
+
+    // Remove the ride first
+    state.0.remove(&ride_id);
+    
+    // Collect and send notifications
+    let notifications = collect_notifications(&ride, "A ride you joined has been deleted.");
+    send_notifications(&mut state, notifications);
+
+    "Ride deleted successfully.".to_string()
+}
+
+// Update cancel_ride to be simpler
 #[ic_cdk::update]
 fn cancel_ride(ride_id: String, owner_id: String) -> String {
-    let mut state = STORAGE_STATE.lock().unwrap();
-
-    if let Some(ride) = state.0.get_mut(&ride_id) {
-        if ride.owner == owner_id {
-            ride.status = RideStatus::Cancelled;
-            for rider in &ride.riders {
-                send_notification(rider, "The ride you joined has been cancelled.");
-            }
-            return "Ride cancelled successfully.".to_string();
-        }
-        return "Only the ride owner can cancel the ride.".to_string();
-    }
-
-    "Ride not found.".to_string()
+    delete_ride(ride_id, owner_id)
 }
 
 // Get User Notifications
@@ -326,22 +371,68 @@ fn driver_join(ride_id: String, driver_id: String) -> String {
         ride.driver_id = Some(driver_id.clone());
         ride.is_driver = true;
         
-        // Notify ride owner and riders
-        send_notification(&ride.owner, &format!("Driver {} has joined your ride.", driver_id));
+        // Collect notifications for all riders
+        let mut notifications = vec![(
+            ride.owner.clone(),
+            format!("Driver {} has joined your ride.", driver_id)
+        )];
+        
+        // Add notifications for other riders
         for rider in &ride.riders {
             if rider != &ride.owner {
-                send_notification(rider, "A driver has joined your ride.");
+                notifications.push((
+                    rider.clone(),
+                    "A driver has joined your ride.".to_string()
+                ));
             }
         }
-
+        
+        send_notifications(&mut state, notifications);
         return "Successfully joined as driver.".to_string();
     }
 
     "Ride not found.".to_string()
 }
 
-fn delete_ride(ride_id: String) {
-    let mut state = STORAGE_STATE.lock().unwrap();
-
-    state.0.remove(&ride_id);
+#[update]
+fn check_driver_rewards(driver_id: String) -> String {
+    let mut stats = DRIVER_STATS.lock().unwrap();
+    let driver_stats = stats.entry(driver_id.clone()).or_default();
+    
+    // Count rides where this driver was assigned
+    let storage = STORAGE_STATE.lock().unwrap();
+    let completed_rides = storage.0.values()
+        .filter(|ride| {
+            ride.driver_id.as_ref().map_or(false, |id| id == &driver_id)
+        })
+        .count() as u64;
+    
+    driver_stats.completed_rides = completed_rides;
+    
+    // Calculate rewards (10 RDT per 10 rides)
+    let eligible_rewards = (completed_rides / 10) * 10;
+    let already_rewarded = driver_stats.last_reward_at;
+    let pending_rewards = if eligible_rewards > already_rewarded {
+        eligible_rewards - already_rewarded
+    } else {
+        0
+    };
+    
+    if pending_rewards > 0 {
+        // Mint reward tokens
+        let mut token_state = get_token_state().lock().unwrap();
+        if let Ok(principal) = Principal::from_text(&driver_id) {
+            let balance = token_state.balances.entry(principal).or_insert(0);
+            *balance += pending_rewards;
+            driver_stats.last_reward_at = eligible_rewards;
+            
+            format!("🎉 Congratulations! {} RDT tokens rewarded for completing {} rides!", 
+                   pending_rewards, completed_rides)
+        } else {
+            "❌ Error: Invalid driver ID".to_string()
+        }
+    } else {
+        format!("🚗 You have completed {} rides. Complete {} more rides for your next reward.", 
+               completed_rides, 10 - (completed_rides % 10))
+    }
 }

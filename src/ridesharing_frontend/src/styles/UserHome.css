@@ -32,7 +32,7 @@
 }
 
 .logout-btn {
-  background: rgba(231, 76, 60, 0.8);
+  background: linear-gradient(135deg, #ff6b6b, #ee5253);
 }
 
 .search-ride-section {
@@ -97,6 +97,36 @@
   display: flex;
   gap: 1rem;
   align-items: center;
+}
+
+.nav-links .logout-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #ff6b6b, #ee5253);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.nav-links .logout-btn:hover {
+  transform: scale(1.05);
+}
+
+.switch-mode-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #9b59b6, #8e44ad);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.switch-mode-btn:hover {
+  transform: scale(1.05);
 }
 
 .dashboard-content {
@@ -174,17 +204,70 @@
 
 .rides-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 30px;
+  padding: 20px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .ride-card {
-  padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 15px;
+  padding: 25px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+
+.ride-card:hover {
+  border-color: rgba(52, 152, 219, 0.6);
+  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.3);
+  transform: translateY(-2px);
+}
+
+.matching-rides-container {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.matching-rides-container {
+  display: grid;
+  gap: 1rem;
+}
+
+.matching-ride {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(0.95);
+  border: 1px solid rgba(52, 152, 219, 0.3);
+  opacity: 0.9;
+}
+
+.matching-ride:hover {
+  transform: scale(0.96);
+  border-color: rgba(52, 152, 219, 0.5);
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 1200px) {
+  .rides-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .rides-container {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ride-info h3 {
@@ -194,7 +277,11 @@
 
 .ride-info p {
   color: #34495e;
-  margin: 0.5rem 0;
+  margin: 0.3rem 0; /* Reduced from 0.5rem */
+}
+
+.ride-info {
+  margin-bottom: 10px; /* Reduced from 15px */
 }
 
 .ride-price {
@@ -222,7 +309,8 @@
 .ride-actions {
   display: flex;
   gap: 1rem;
-  margin-top: 1rem;
+  margin-top: 0.3rem; 
+  margin-bottom: 0.8rem;/* Reduced from 0.5rem */
 }
 
 .start-btn {
@@ -402,53 +490,48 @@
 }
 
 .pay-btn {
-  background: rgba(241, 196, 15, 0.8);
+  background: linear-gradient(135deg, #27ae60, #2ecc71);
   color: white;
   border: none;
   padding: 0.8rem 2rem;
   border-radius: 5px;
+  font-weight: bold;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: all 0.3s ease;
   margin-top: 1rem;
-  width: 100%;
+  width: auto; /* Changed from 100% */
 }
 
 .pay-btn:hover {
   transform: translateY(-2px);
-  background: rgba(241, 196, 15, 0.9);
+  box-shadow: 0 5px 15px rgba(46, 204, 113, 0.3);
 }
 
 .pay-btn:disabled {
-  background: rgba(189, 195, 199, 0.8);
+  background: #bdc3c7;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+}
+
+.payment-info {
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(46, 204, 113, 0.1);
+  border-radius: 4px;
+  color: #27ae60;
+  font-weight: bold;
 }
 
 .matching-rides-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: 0.5rem;  /* Reduced from 1rem */
+  padding-top: 0.5rem; /* Reduced from 1rem */
   border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .matching-rides-section h4 {
   color: #2c3e50;
-  margin-bottom: 1rem;
-}
-
-.matching-rides-container {
-  display: grid;
-  gap: 1rem;
-}
-
-.matching-ride {
-  background: rgba(255, 255, 255, 0.1);
-  transform: scale(0.95);
-  border: 1px solid rgba(52, 152, 219, 0.3);
-}
-
-.matching-ride:hover {
-  transform: scale(0.96);
-  border-color: rgba(52, 152, 219, 0.5);
+  margin-top: 0px; /* Changed from 0.5rem to 0 */
 }
 
 .driver-join-btn {
@@ -471,4 +554,31 @@
   background: rgba(189, 195, 199, 0.8);
   cursor: not-allowed;
   transform: none;
+}
+
+.status-assigned {
+  color: #27ae60;
+  font-weight: bold;
+}
+
+.status-unassigned {
+  color: #e74c3c;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.driver-join-btn {
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.driver-join-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
 }
