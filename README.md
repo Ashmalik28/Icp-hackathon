@@ -76,7 +76,7 @@ dfx canister --network ic info ridesharing_frontend
 This project is licensed under the **MIT License**.
 
 ## 🤝 Contributors
-- **Your Name** – Ashyam
+
 - **Support** – Ashutosh and Arpit 
 
 - 🌐 Website: https://w2lgq-ayaaa-aaaai-q3vvq-cai.icp0.io/
